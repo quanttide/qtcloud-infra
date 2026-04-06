@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opencode-web
+  labels:
+    app: opencode-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opencode-web
+  template:
+    metadata:
+      labels:
+        app: opencode-web
+    spec:
+      containers:
+      - name: opencode-web
+        image: node:20-alpine
+        imagePullPolicy: Never
+        command: ["/usr/local/bin/opencode", "web", "--hostname", "0.0.0.0", "--port", "8080"]
+        ports:
+        - containerPort: 8080
+        env:
+        - name: OPENCODE_SERVER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: opencode-secret
+              key: password
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: opencode-binary
+          mountPath: /usr/local/bin/opencode
+        - name: opencode-data
+          mountPath: /root/.local/share/opencode
+      volumes:
+      - name: opencode-binary
+        hostPath:
+          path: /usr/local/bin/opencode
+          type: File
+      - name: opencode-data
+        hostPath:
+          path: /data/opencode
+          type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opencode-web
+spec:
+  type: NodePort
+  selector:
+    app: opencode-web
+  ports:
+  - port: 8080
+    targetPort: 8080
+    nodePort: 30001

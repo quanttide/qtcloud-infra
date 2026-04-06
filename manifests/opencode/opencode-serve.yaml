@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opencode-serve
+  labels:
+    app: opencode-serve
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opencode-serve
+  template:
+    metadata:
+      labels:
+        app: opencode-serve
+    spec:
+      containers:
+      - name: opencode-serve
+        image: node:20-alpine
+        imagePullPolicy: Never
+        command: ["/usr/local/bin/opencode", "serve", "--hostname", "0.0.0.0", "--port", "4096"]
+        ports:
+        - containerPort: 4096
+        env:
+        - name: OPENCODE_SERVER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: opencode-secret
+              key: password
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 4096
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 4096
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: opencode-binary
+          mountPath: /usr/local/bin/opencode
+        - name: opencode-data
+          mountPath: /root/.local/share/opencode
+      volumes:
+      - name: opencode-binary
+        hostPath:
+          path: /usr/local/bin/opencode
+          type: File
+      - name: opencode-data
+        hostPath:
+          path: /data/opencode
+          type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opencode-serve
+spec:
+  type: NodePort
+  selector:
+    app: opencode-serve
+  ports:
+  - port: 4096
+    targetPort: 4096
+    nodePort: 30000
