@@ -1,0 +1,46 @@
+service: opencode
+provider:
+  name: alibaba
+  runtime: custom-container
+  region: ${env:REGION}
+  timeout: 600
+  memorySize: 512
+
+  vpc:
+    vpcId: ${env:VPC_ID}
+    vSwitchIds:
+      - ${env:VSWITCH_ID}
+    securityGroupId: ${env:SECURITY_GROUP_ID}
+
+  nas:
+    enable: true
+    userId: 10003
+    groupId: 10003
+    mountPoints:
+      - serverAddr: ${env:NAS_ID}.${env:REGION}.nas.aliyuncs.com:/opencode
+        mountDir: /root/.local/share/opencode
+
+  environment:
+    OPENCODE_SERVER_PASSWORD: ${env:OPENCODE_PASSWORD}
+
+functions:
+  opencode-serve:
+    handler: not-used
+    timeout: 600
+    instanceType: c2
+    container:
+      image: ${env:REGION}.cr.aliyuncs.com/${env:IMAGE_NAMESPACE}/opencode:latest
+      command: '["/bin/sh", "-c", "OPENCODE_MODE=serve /entrypoint.sh"]'
+      port: 9000
+
+  opencode-web:
+    handler: not-used
+    timeout: 600
+    instanceType: c2
+    container:
+      image: ${env:REGION}.cr.aliyuncs.com/${env:IMAGE_NAMESPACE}/opencode:latest
+      command: '["/bin/sh", "-c", "OPENCODE_MODE=web /entrypoint.sh"]'
+      port: 9000
+
+    environment:
+      OPENCODE_SERVER_URL: 'https://${env:REGION}.fc.aliyuncs.com/2016-08-15/proxy/opencode/opencode-serve/'
