@@ -9,18 +9,40 @@ echo "计费周期: $BILLING_PERIOD"
 echo "区域: $REGION"
 echo ""
 
-echo "--- 实例账单 ---"
-aliyun bssopenapi describe-instance-bill \
+BILL_DATA=$(aliyun bssopenapi describe-instance-bill \
   --billing-cycle "$BILLING_PERIOD" \
   --granularity MONTHLY \
-  2>&1 | jq '.'
-echo ""
+  2>&1)
 
-echo "--- 分账账单 ---"
-aliyun bssopenapi describe-split-item-bill \
-  --billing-cycle "$BILLING_PERIOD" \
-  2>&1 | jq '.'
+echo "--- 账单汇总 ---"
+echo "$BILL_DATA" | jq -r '
+  .Data.Items | 
+  group_by(.ProductName) | 
+  map({
+    product: .[0].ProductName,
+    total: ([.[].PretaxAmount] | add | . * 100 | floor / 100)
+  }) | 
+  sort_by(-.total) |
+  .[] | 
+  "  \(.product): ¥\(.total)"
+'
+
+TOTAL=$(echo "$BILL_DATA" | jq -r '
+  [.Data.Items[] | select(.Item == "PayAsYouGoBill") | .PretaxAmount] | 
+  add | 
+  . * 100 | floor / 100
+')
+
+echo ""
+echo "--- 总计 ---"
+echo "  ¥$TOTAL"
 echo ""
 
 echo "--- 账户余额 ---"
-aliyun bssopenapi query-account-balance 2>&1 | jq '.'
+aliyun bssopenapi query-account-balance 2>&1 | jq -r '
+  "  可用余额: ¥\(.Data.AvailableAmount) \(.Data.Currency)"
+'
+
+echo ""
+echo "--- 详细账单 ---"
+echo "$BILL_DATA" | jq '.'

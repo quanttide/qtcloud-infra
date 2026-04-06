@@ -9,7 +9,7 @@ import subprocess
 import json
 import os
 from datetime import datetime
-from typing import Optional
+from collections import defaultdict
 
 
 class AliyunBilling:
@@ -36,16 +36,27 @@ class AliyunBilling:
             "--granularity", "MONTHLY"
         ])
 
-    def get_split_item_bill(self, billing_cycle: str) -> dict:
-        return self.run_aliyun_cli([
-            "bssopenapi", "describe-split-item-bill",
-            "--billing-cycle", billing_cycle
-        ])
-
     def get_account_balance(self) -> dict:
         return self.run_aliyun_cli([
             "bssopenapi", "query-account-balance"
         ])
+
+    def calculate_summary(self, bill_data: dict) -> tuple:
+        if "error" in bill_data or "Data" not in bill_data:
+            return {}, 0
+        
+        items = bill_data["Data"].get("Items", [])
+        product_totals = defaultdict(float)
+        total = 0
+        
+        for item in items:
+            if item.get("Item") == "PayAsYouGoBill":
+                amount = item.get("PretaxAmount", 0)
+                product = item.get("ProductName", "未知")
+                product_totals[product] += amount
+                total += amount
+        
+        return dict(product_totals), total
 
     def print_report(self, billing_cycle: str):
         print("=" * 50)
@@ -55,30 +66,32 @@ class AliyunBilling:
         print(f"区域: {self.region}")
         print()
 
-        print("--- 实例账单 ---")
         bill = self.get_instance_bill(billing_cycle)
+        
+        print("--- 账单汇总 ---")
         if "error" not in bill:
-            print(json.dumps(bill, indent=2, ensure_ascii=False))
+            product_totals, total = self.calculate_summary(bill)
+            for product, amount in sorted(product_totals.items(), key=lambda x: -x[1]):
+                print(f"  {product}: ¥{round(amount, 2)}")
+            print()
+            print("--- 总计 ---")
+            print(f"  ¥{round(total, 2)}")
         else:
             print(f"错误: {bill.get('error')}")
-        print()
-
-        print("--- 分账账单 ---")
-        split_bill = self.get_split_item_bill(billing_cycle)
-        if "error" not in split_bill:
-            print(json.dumps(split_bill, indent=2, ensure_ascii=False))
-        else:
-            print(f"错误: {split_bill.get('error')}")
         print()
 
         print("--- 账户余额 ---")
         balance = self.get_account_balance()
         if "error" not in balance and "Data" in balance:
             data = balance["Data"]
-            print(f"可用余额: {data.get('AvailableAmount')} {data.get('Currency')}")
-            print(f"信用额度: {data.get('CreditAmount')} {data.get('Currency')}")
+            print(f"  可用余额: ¥{data.get('AvailableAmount')} {data.get('Currency')}")
         else:
-            print(json.dumps(balance, indent=2, ensure_ascii=False))
+            print(f"错误: {balance.get('error', balance)}")
+        print()
+
+        print("--- 详细账单 ---")
+        if "error" not in bill:
+            print(json.dumps(bill, indent=2, ensure_ascii=False))
 
 
 def get_last_month_cycle() -> str:
