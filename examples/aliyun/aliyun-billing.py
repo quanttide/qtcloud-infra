@@ -2,7 +2,7 @@
 """
 阿里云账单查询工具
 
-使用阿里云 CLI 获取账号级账单信息
+使用阿里云 CLI 获取账号级账单信息，默认上个月
 """
 
 import subprocess
@@ -23,39 +23,29 @@ class AliyunBilling:
             text=True
         )
         if result.returncode != 0:
-            print(f"CLI Error: {result.stderr}")
-            return {}
+            return {"error": result.stderr}
         try:
             return json.loads(result.stdout)
         except json.JSONDecodeError:
-            return {}
+            return {"error": "Invalid JSON response"}
 
-    def get_bill_overview(self, billing_cycle: str) -> dict:
+    def get_instance_bill(self, billing_cycle: str) -> dict:
         return self.run_aliyun_cli([
-            "bssapi", "QueryBillOverviewBill",
-            "--BillingCycle", billing_cycle,
-            "--Granularity", "MONTHLY"
+            "bssopenapi", "describe-instance-bill",
+            "--billing-cycle", billing_cycle,
+            "--granularity", "MONTHLY"
         ])
 
-    def get_bill_list(self, billing_cycle: str, max_results: int = 100) -> dict:
+    def get_split_item_bill(self, billing_cycle: str) -> dict:
         return self.run_aliyun_cli([
-            "bssapi", "QueryBillList",
-            "--BillingCycle", billing_cycle,
-            "--Granularity", "MONTHLY",
-            "--MaxResults", str(max_results)
+            "bssopenapi", "describe-split-item-bill",
+            "--billing-cycle", billing_cycle
         ])
-
-    def get_bill_detail(self, billing_cycle: str, product_code: str = None) -> dict:
-        cmd = [
-            "bssapi", "QueryBillDetail",
-            "--BillingCycle", billing_cycle
-        ]
-        if product_code:
-            cmd.extend(["--ProductCode", product_code])
-        return self.run_aliyun_cli(cmd)
 
     def get_account_balance(self) -> dict:
-        return self.run_aliyun_cli(["bssapi", "QueryAccountBalance"])
+        return self.run_aliyun_cli([
+            "bssopenapi", "query-account-balance"
+        ])
 
     def print_report(self, billing_cycle: str):
         print("=" * 50)
@@ -65,29 +55,30 @@ class AliyunBilling:
         print(f"区域: {self.region}")
         print()
 
+        print("--- 实例账单 ---")
+        bill = self.get_instance_bill(billing_cycle)
+        if "error" not in bill:
+            print(json.dumps(bill, indent=2, ensure_ascii=False))
+        else:
+            print(f"错误: {bill.get('error')}")
+        print()
+
+        print("--- 分账账单 ---")
+        split_bill = self.get_split_item_bill(billing_cycle)
+        if "error" not in split_bill:
+            print(json.dumps(split_bill, indent=2, ensure_ascii=False))
+        else:
+            print(f"错误: {split_bill.get('error')}")
+        print()
+
         print("--- 账户余额 ---")
         balance = self.get_account_balance()
-        if balance:
+        if "error" not in balance and "Data" in balance:
+            data = balance["Data"]
+            print(f"可用余额: {data.get('AvailableAmount')} {data.get('Currency')}")
+            print(f"信用额度: {data.get('CreditAmount')} {data.get('Currency')}")
+        else:
             print(json.dumps(balance, indent=2, ensure_ascii=False))
-        print()
-
-        print("--- 账单概览 ---")
-        overview = self.get_bill_overview(billing_cycle)
-        if overview:
-            print(json.dumps(overview, indent=2, ensure_ascii=False))
-        print()
-
-        print("--- 详细账单 ---")
-        bills = self.get_bill_list(billing_cycle)
-        if bills:
-            print(json.dumps(bills, indent=2, ensure_ascii=False))
-        print()
-
-        print("--- 函数计算 (FC) 账单 ---")
-        fc_bill = self.get_bill_detail(billing_cycle, "fc")
-        if fc_bill:
-            print(json.dumps(fc_bill, indent=2, ensure_ascii=False))
-        print()
 
 
 def get_last_month_cycle() -> str:
