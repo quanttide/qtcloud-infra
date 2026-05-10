@@ -1,0 +1,241 @@
+我们单独聚焦这一步：意图 → 状态机，并用 pg 与 stack-auth 的真实依赖做演示。下面是一个可直接运行的 HTML，它展示平台如何把一句自然语言意图，翻译成结构化的、带依赖关系的期望状态声明。stack-auth 依赖 pg，且默认数据库为 stack-frame 这一关键约束被明确提取了出来。
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>意图 → 状态机 · pg + stack-auth</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: #f5f7fb;
+            color: #1e293b;
+            padding: 2rem 1rem;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            max-width: 860px;
+            width: 100%;
+            background: white;
+            border-radius: 18px;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.06);
+            padding: 2.5rem 2.2rem;
+            border: 1px solid #e9edf4;
+        }
+        h1 {
+            font-size: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.3rem;
+        }
+        .badge {
+            background: #eef2ff;
+            color: #4338ca;
+            padding: 0.2rem 1rem;
+            border-radius: 20px;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+        .subtitle {
+            color: #64748b;
+            margin: 0.5rem 0 2rem;
+            padding-left: 1rem;
+            border-left: 4px solid #6366f1;
+            background: #f8fafc;
+            border-radius: 0 6px 6px 0;
+        }
+        .intent-box {
+            background: #f1f5f9;
+            padding: 1.2rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            font-style: italic;
+            color: #0f172a;
+            font-size: 1.1rem;
+            border: 1px dashed #94a3b8;
+        }
+        .intent-box strong {
+            font-style: normal;
+        }
+        .arrow-down {
+            text-align: center;
+            font-size: 2rem;
+            color: #6366f1;
+            margin: 0.5rem 0 1rem;
+        }
+        .state-machine {
+            background: #f8fafc;
+            border: 1px solid #dbeafe;
+            border-radius: 16px;
+            padding: 1.8rem;
+            margin-top: 1.5rem;
+        }
+        .state-machine h2 {
+            font-size: 1.25rem;
+            margin-bottom: 1.5rem;
+            color: #1e293b;
+        }
+        .resources-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            justify-content: center;
+            align-items: flex-start;
+            margin-bottom: 1.5rem;
+        }
+        .resource-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 1.2rem;
+            min-width: 200px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.02);
+            position: relative;
+        }
+        .resource-card.db {
+            border-top: 4px solid #10b981;
+        }
+        .resource-card.app {
+            border-top: 4px solid #6366f1;
+        }
+        .resource-card h3 {
+            font-size: 1rem;
+            margin-bottom: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+        .resource-card .attr {
+            font-size: 0.85rem;
+            color: #334155;
+            margin: 0.35rem 0;
+            padding-left: 0.5rem;
+            border-left: 3px solid #cbd5e1;
+        }
+        .resource-card .attr strong {
+            color: #0f172a;
+        }
+        .dependency-arrow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            color: #6366f1;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin: 0 0.5rem;
+            white-space: nowrap;
+        }
+        .dependency-arrow svg {
+            display: block;
+        }
+        .confirm {
+            margin-top: 1.5rem;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            padding: 0.8rem 1.2rem;
+            border-radius: 10px;
+            color: #166534;
+            font-size: 0.9rem;
+        }
+        footer {
+            margin-top: 2.5rem;
+            font-size: 0.8rem;
+            color: #94a3b8;
+            text-align: center;
+            border-top: 1px solid #e9eef3;
+            padding-top: 1.5rem;
+        }
+        @media (max-width: 600px) {
+            .resources-grid {
+                flex-direction: column;
+                align-items: center;
+            }
+            .dependency-arrow {
+                flex-direction: row;
+                gap: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>
+        🧭 意图 → 状态机
+        <span class="badge">pg + stack-auth</span>
+    </h1>
+    <div class="subtitle">
+        平台将模糊的自然语言意图，翻译为严格、可验证的期望状态声明。<br>依赖关系、默认值全部显式化，AI 拿到后不再"猜"。
+    </div>
+
+    <!-- 用户意图 -->
+    <div class="intent-box">
+        <strong>💬 用户意图：</strong>
+        "部署 stack-auth 服务，它依赖一个 PostgreSQL 数据库，默认数据库名是 <code>stack-frame</code>。数据库需要持久化存储，并调度到 db 节点。"
+    </div>
+
+    <div class="arrow-down">⬇️ 平台解析与提取 ⬇️</div>
+
+    <!-- 生成的状态机 -->
+    <div class="state-machine">
+        <h2>📊 期望状态声明（状态机）</h2>
+
+        <div class="resources-grid">
+            <!-- PostgreSQL 节点 -->
+            <div class="resource-card db">
+                <h3>🐘 PostgreSQL</h3>
+                <div class="attr"><strong>类型:</strong> 数据库服务</div>
+                <div class="attr"><strong>名称:</strong> pg</div>
+                <div class="attr"><strong>存储:</strong> PersistentVolume (20Gi)</div>
+                <div class="attr"><strong>调度:</strong> node label <code>role=db</code></div>
+                <div class="attr"><strong>端口:</strong> 5432</div>
+                <div class="attr"><strong>状态:</strong> 必须就绪</div>
+            </div>
+
+            <!-- 依赖箭头 -->
+            <div class="dependency-arrow">
+                <svg width="40" height="40" viewBox="0 0 40 40">
+                    <defs>
+                        <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+                            <path d="M0,0 L10,5 L0,10 Z" fill="#6366f1"/>
+                        </marker>
+                    </defs>
+                    <line x1="5" y1="5" x2="30" y2="30" stroke="#6366f1" stroke-width="2.5" marker-end="url(#arrow)"/>
+                </svg>
+                <span>依赖<br>默认数据库<br><strong>stack-frame</strong></span>
+            </div>
+
+            <!-- stack-auth 节点 -->
+            <div class="resource-card app">
+                <h3>📦 stack-auth</h3>
+                <div class="attr"><strong>类型:</strong> 应用服务</div>
+                <div class="attr"><strong>名称:</strong> stack-auth</div>
+                <div class="attr"><strong>依赖:</strong> pg (必须可用)</div>
+                <div class="attr"><strong>数据库名:</strong> stack-frame</div>
+                <div class="attr"><strong>环境变量:</strong> <code>DATABASE_URL=pg:5432/stack-frame</code></div>
+                <div class="attr"><strong>状态:</strong> 等待数据库就绪</div>
+            </div>
+        </div>
+
+        <div class="confirm">
+            ✅ 状态机已通过静态验证：依赖闭环检查通过、标签无冲突、默认库名已确认。<br>
+            ⚡ AI 后续生成 CDK 代码时，只需按此状态机"直译"，不再需要推理依赖关系。
+        </div>
+    </div>
+
+    <footer>
+        InfraPilot · 意图 → 状态机是消除 AI 过度思考的第一原则
+    </footer>
+</div>
+</body>
+</html>
+```
